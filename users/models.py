@@ -1,4 +1,3 @@
-from users.domain.entities.user import User
+from users.infrastructure.models.user_model import UserModel
 
-
-# Create your models here.
+__all__ = ["UserModel"]

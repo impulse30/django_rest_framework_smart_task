@@ -35,6 +35,7 @@ INSTALLED_APPS = [
 
     # Local apps (ajouter ici plus tard)
     "users",
+    "projects",
 ]
 
 MIDDLEWARE = [
@@ -119,7 +120,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Default Primary Key Field
 # ---------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-AUTH_USER_MODEL = "users.User"
+AUTH_USER_MODEL = "users.UserModel"
 
 from datetime import timedelta
 
