@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "rest_framework",
 
     # Local apps (ajouter ici plus tard)
+    "users",
 ]
 
 MIDDLEWARE = [
@@ -70,10 +71,19 @@ WSGI_APPLICATION = "core.wsgi.application"
 # Database
 # ---------------------------------------------------
 # Par défaut SQLite, mais tu passeras à MySQL dans development.py
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT', '3306'),
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES', innodb_strict_mode=1"
+        },
     }
 }
 
@@ -109,3 +119,20 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Default Primary Key Field
 # ---------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+AUTH_USER_MODEL = "users.User"
+
+from datetime import timedelta
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+
