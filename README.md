@@ -14,6 +14,8 @@ Ce document sert de guide complet pour l'installation, la configuration et la co
     - [Les 4 Couches de l'Architecture](#les-4-couches-de-larchitecture)
     - [Exemple d'un flux de requête](#exemple-dun-flux-de-requête)
 4. [Workflow de Démarrage Rapide](#workflow-de-démarrage-rapide)
+5. [Structure et Fonctionnalités des Applications](#structure-et-fonctionnalités-des-applications)
+6. [Guide d'implémentation : Ajout de la fonctionnalité d'inscription](#guide-dimplémentation--ajout-de-la-fonctionnalité-dinscription)
 
 ---
 
@@ -190,3 +192,337 @@ Pour un nouveau développeur, voici les étapes à suivre pour lancer le projet 
     ```
 
 L'application devrait maintenant être accessible à l'adresse `http://127.0.0.1:8000/`.
+
+---
+
+## Structure et Fonctionnalités des Applications
+
+Cette section détaille l'organisation des applications du projet selon la Clean Architecture et les fonctionnalités qu'elles exposent.
+
+### Fonctionnalités par Application
+
+#### Application `users`
+- **Inscription (Registration)**
+  - **Endpoint** : `POST /api/users/register/`
+  - **Description** : Permet à un nouvel utilisateur de créer un compte.
+- **Connexion (Login)**
+  - **Endpoint** : `POST /api/users/login/`
+  - **Description** : Permet à un utilisateur d'obtenir des jetons d'accès JWT.
+
+#### Application `projects`
+- **Création de Projet (Project Creation)**
+  - **Endpoint** : `POST /api/projects/`
+  - **Description** : Permet à un utilisateur authentifié de créer un nouveau projet. Le créateur devient administrateur du projet.
+
+### Arborescence Détaillée
+
+Voici la structure des fichiers de l'application `users`, expliquée couche par couche :
+
+```
+users/
+├── domain/                      # 1. Le cœur de la logique métier (indépendant de tout)
+│   └── entities/
+│       └── user.py              # -> La classe User pure, qui représente un utilisateur.
+│
+├── application/                 # 2. La logique applicative (cas d'utilisation)
+│   └── services/
+│       ├── auth_service.py      # -> Orchestre l'inscription et la connexion.
+│       ├── password_hasher.py   # -> Interface ABSTRAITE pour le hachage de mdp.
+│       └── token_generator.py   # -> Interface ABSTRAITE pour la génération de token.
+│
+├── infrastructure/              # 3. Les détails techniques (Django, base de données, etc.)
+│   ├── models/
+│   │   └── user_model.py        # -> Le modèle Django qui est mappé à la table en BDD.
+│   ├── repositories/
+│   │   └── user_repository.py   # -> La classe qui communique avec la BDD via le UserModel.
+│   ├── mappers/
+│   │   └── user_mapper.py       # -> Traduit un User (domaine) en UserModel (BDD) et vice-versa.
+│   └── services/
+│       ├── django_password_hasher.py # -> Implémentation CONCRÈTE du hasher avec Django.
+│       └── jwt_token_generator.py    # -> Implémentation CONCRÈTE du token avec JWT.
+│
+├── presentation/                # 4. L'interface avec l'extérieur (API REST)
+│   ├── views/
+│   │   └── auth_view.py         # -> Gère les requêtes HTTP pour /register et /login.
+│   ├── serializers/
+│   │   └── auth_serializers.py  # -> Valide les données JSON envoyées par le client.
+│   └── urls.py                  # -> Définit les URLs de l'application.
+│
+├── admin.py                     # Fichier de configuration pour l'interface admin de Django.
+├── models.py                    # Fichier "pont" pour que Django découvre notre UserModel.
+├── apps.py                      # Configuration de l'application Django.
+└── migrations/                  # Fichiers de migration de la base de données.
+```
+
+---
+
+## Guide d'implémentation : Ajout de la fonctionnalité d'inscription
+
+Cette section sert de tutoriel pour illustrer comment implémenter une fonctionnalité en respectant la Clean Architecture. Nous allons construire l'endpoint d'inscription (`POST /api/users/register/`) pas à pas.
+
+### Étape 1 : Le Domaine (Le cœur)
+
+On commence toujours par le domaine. On définit ce qu'est un `User` pour notre application, sans se soucier de la base de données ou du web.
+
+**Fichier** : `users/domain/entities/user.py`
+
+**Rôle** : Définir la structure, les validations de base et les règles métier de l'entité `User`. C'est un simple objet Python.
+
+```python
+import uuid
+
+class User:
+    """
+    Entité représentant un utilisateur dans le domaine.
+    Indépendante de tout framework.
+    """
+    def __init__(
+        self,
+        id,
+        email,
+        full_name,
+        password_hash=None,
+        avatar=None,
+        is_active=True,
+        is_staff=False,
+        date_joined=None,
+    ):
+        self.id = id or uuid.uuid4()
+        self.email = self._validate_email(email)
+        self.full_name = self._validate_full_name(full_name)
+        self.password_hash = password_hash
+        self.avatar = avatar
+        self.is_active = is_active
+        self.is_staff = is_staff
+        self.date_joined = date_joined
+
+    def _validate_email(self, email):
+        if not email or "@" not in email:
+            raise ValueError("L'adresse email est invalide.")
+        return email.lower()
+
+    def _validate_full_name(self, full_name):
+        if not full_name or len(full_name.strip()) == 0:
+            raise ValueError("Le nom complet ne peut pas être vide.")
+        return full_name.strip()
+
+    # ... autres méthodes métier ...
+```
+
+### Étape 2 : L'Application (Les cas d'utilisation)
+
+Maintenant, on définit le cas d'utilisation "Inscrire un utilisateur". On a besoin d'un service qui orchestre cette action. Ce service aura besoin de dépendances (comme un "hasher" de mot de passe), mais il ne connaîtra que leurs interfaces abstraites.
+
+#### 2.1. Définir le contrat du Hasher
+
+**Fichier** : `users/application/services/password_hasher.py`
+
+**Rôle** : Définir ce que n'importe quel service de hachage doit pouvoir faire. C'est un contrat, pas une implémentation.
+
+```python
+import abc
+
+class PasswordHasher(abc.ABC):
+    @abc.abstractmethod
+    def hash(self, password: str) -> str:
+        ...
+
+    @abc.abstractmethod
+    def verify(self, password_hash: str, password: str) -> bool:
+        ...
+```
+
+#### 2.2. Créer le Service d'Authentification
+
+**Fichier** : `users/application/services/auth_service.py`
+
+**Rôle** : Contenir la logique de l'inscription. Il dépend du `UserRepository` (pour parler à la BDD) et du `PasswordHasher`, mais uniquement via leurs abstractions.
+
+```python
+from users.domain.entities.user import User
+from users.infrastructure.repositories.user_repository import UserRepository
+from users.application.services.password_hasher import PasswordHasher
+
+class AuthService:
+    def __init__(
+        self,
+        user_repository: UserRepository,
+        password_hasher: PasswordHasher,
+        # ... token_generator: TokenGenerator,
+    ):
+        self.user_repository = user_repository
+        self.password_hasher = password_hasher
+        # ...
+
+    def register_user(self, email, password, full_name):
+        if self.user_repository.exists_by_email(email):
+            raise ValueError("Un utilisateur avec cet email existe déjà.")
+
+        password_hash = self.password_hasher.hash(password)
+        user = User(
+            id=None,
+            email=email,
+            full_name=full_name,
+            password_hash=password_hash
+        )
+        return self.user_repository.create_user(user)
+
+    # ... login_user ...
+```
+
+### Étape 3 : L'Infrastructure (Les détails techniques)
+
+C'est ici qu'on implémente les détails concrets : comment on stocke les données (avec Django) et comment on hache les mots de passe (avec les outils de Django).
+
+#### 3.1. Le Modèle Django
+
+**Fichier** : `users/infrastructure/models/user_model.py`
+
+**Rôle** : La représentation de notre utilisateur dans la base de données. Ce fichier dépend de Django.
+
+```python
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.db import models
+import uuid
+
+class UserModel(AbstractBaseUser, PermissionsMixin):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True, max_length=191)
+    full_name = models.CharField(max_length=191)
+    # ... autres champs ...
+
+    # ... UserManager ...
+```
+
+#### 3.2. Le Mapper
+
+**Fichier** : `users/infrastructure/mappers/user_mapper.py`
+
+**Rôle** : Traduire l'objet `User` du domaine en `UserModel` pour la BDD, et vice-versa.
+
+```python
+from users.domain.entities.user import User
+from users.infrastructure.models.user_model import UserModel
+
+class UserMapper:
+    @staticmethod
+    def to_entity(user_model: UserModel) -> User:
+        # ... logique de conversion ...
+
+    @staticmethod
+    def to_model(user_entity: User) -> UserModel:
+        # ... logique de conversion ...
+```
+
+#### 3.3. Le Repository
+
+**Fichier** : `users/infrastructure/repositories/user_repository.py`
+
+**Rôle** : Implémenter la logique d'accès aux données. Il utilise le `UserModel` de Django et le `UserMapper`.
+
+```python
+from users.domain.entities.user import User
+from users.infrastructure.models.user_model import UserModel
+from users.infrastructure.mappers.user_mapper import UserMapper
+
+class UserRepository:
+    def create_user(self, user_entity: User) -> User:
+        user_model = UserMapper.to_model(user_entity)
+        user_model.set_password(user_entity.password_hash) # Note: set_password vient de l'AbstractBaseUser de Django
+        user_model.save()
+        return UserMapper.to_entity(user_model)
+
+    def exists_by_email(self, email: str) -> bool:
+        return UserModel.objects.filter(email=email).exists()
+
+    # ... autres méthodes ...
+```
+
+#### 3.4. L'implémentation du Hasher
+
+**Fichier** : `users/infrastructure/services/django_password_hasher.py`
+
+**Rôle** : Fournir une implémentation concrète de l'interface `PasswordHasher` en utilisant les fonctions de Django.
+
+```python
+from django.contrib.auth.hashers import make_password, check_password
+from users.application.services.password_hasher import PasswordHasher
+
+class DjangoPasswordHasher(PasswordHasher):
+    def hash(self, password: str) -> str:
+        return make_password(password)
+
+    def verify(self, password_hash: str, password: str) -> bool:
+        return check_password(password, password_hash)
+```
+
+### Étape 4 : La Présentation (L'API REST)
+
+Enfin, on expose notre cas d'utilisation via une API.
+
+#### 4.1. Le Serializer
+
+**Fichier** : `users/presentation/serializers/auth_serializers.py`
+
+**Rôle** : Valider les données JSON qui arrivent dans la requête HTTP.
+
+```python
+from rest_framework import serializers
+
+class RegisterSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    full_name = serializers.CharField(max_length=191)
+    password = serializers.CharField(write_only=True)
+```
+
+#### 4.2. La Vue
+
+**Fichier** : `users/presentation/views/auth_view.py`
+
+**Rôle** : Gérer la requête HTTP. Elle utilise le Serializer pour valider les données, puis instancie et appelle `AuthService` avec toutes ses dépendances concrètes. C'est ce qu'on appelle l'**Injection de Dépendances**.
+
+```python
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.views import APIView
+from .serializers import RegisterSerializer
+from users.application.services.auth_service import AuthService
+from users.infrastructure.repositories.user_repository import UserRepository
+from users.infrastructure.services.django_password_hasher import DjangoPasswordHasher
+
+# C'est ici que l'on assemble nos composants
+def get_auth_service():
+    user_repository = UserRepository()
+    password_hasher = DjangoPasswordHasher()
+    return AuthService(user_repository, password_hasher)
+
+class RegisterView(APIView):
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            auth_service = get_auth_service()
+            user = auth_service.register_user(**serializer.validated_data)
+            # ... retourner une réponse succès ...
+        except ValueError as e:
+            # ... retourner une erreur ...
+```
+
+#### 4.3. L'URL
+
+**Fichier** : `users/presentation/urls.py`
+
+**Rôle** : Lier l'URL `/register/` à notre `RegisterView`.
+
+```python
+from django.urls import path
+from .views.auth_view import RegisterView
+
+urlpatterns = [
+    path("register/", RegisterView.as_view(), name="register"),
+    # ...
+]
+```
+
+Et voilà ! Nous avons implémenté une fonctionnalité complète en respectant la séparation des couches. Chaque fichier a un rôle unique et clair.
