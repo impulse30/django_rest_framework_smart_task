@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User
+from .models import UserModel
 
 class UserAdmin(BaseUserAdmin):
     ordering = ['email']
@@ -14,9 +14,9 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'full_name', 'password1', 'password2', 'is_active', 'is_staff')}
+            'fields': ('email', 'full_name', 'password', 'is_active', 'is_staff')}
         ),
     )
     search_fields = ('email', 'full_name')
 
-admin.site.register(User, UserAdmin)
+admin.site.register(UserModel, UserAdmin)
