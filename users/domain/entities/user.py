@@ -1,78 +1,61 @@
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
-from django.db import models
-from django.utils import timezone
+import uuid
 
+class User:
+    """
+    Entité représentant un utilisateur dans le domaine.
+    Indépendante de tout framework.
+    """
+    def __init__(
+        self,
+        id,
+        email,
+        full_name,
+        password_hash=None,  # Ne pas stocker le mot de passe en clair
+        avatar=None,
+        is_active=True,
+        is_staff=False,
+        date_joined=None,
+    ):
+        self.id = id or uuid.uuid4()
+        self.email = self._validate_email(email)
+        self.full_name = self._validate_full_name(full_name)
+        self.password_hash = password_hash
+        self.avatar = avatar
+        self.is_active = is_active
+        self.is_staff = is_staff
+        self.date_joined = date_joined
 
-class UserManager(BaseUserManager):
-    """Gestionnaire personnalisé pour le modèle User."""
+    def _validate_email(self, email):
+        if not email or "@" not in email:
+            raise ValueError("L'adresse email est invalide.")
+        return email.lower()
 
-    def create_user(self, email, password=None, **extra_fields):
+    def _validate_full_name(self, full_name):
+        if not full_name or len(full_name.strip()) == 0:
+            raise ValueError("Le nom complet ne peut pas être vide.")
+        return full_name.strip()
+
+    def set_password(self, password, hasher):
         """
-        Crée et enregistre un utilisateur avec un email et un mot de passe.
+        Définit le mot de passe de l'utilisateur en utilisant un hasher externe.
         """
-        if not email:
-            raise ValueError("L'utilisateur doit avoir une adresse email.")
-        email = self.normalize_email(email)
-        extra_fields.setdefault("is_active", True)
-        user = self.model(email=email, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
+        if not password or len(password) < 8:
+            raise ValueError("Le mot de passe doit contenir au moins 8 caractères.")
+        self.password_hash = hasher.hash(password)
 
-    def create_superuser(self, email, password=None, **extra_fields):
+    def check_password(self, password, hasher):
         """
-        Crée et enregistre un superutilisateur (admin).
+        Vérifie si un mot de passe correspond au hash stocké.
         """
-        extra_fields.setdefault("is_staff", True)
-        extra_fields.setdefault("is_superuser", True)
-        extra_fields.setdefault("is_active", True)
+        return hasher.verify(self.password_hash, password)
 
-        if not extra_fields.get("is_staff"):
-            raise ValueError("Le superutilisateur doit avoir is_staff=True.")
-        if not extra_fields.get("is_superuser"):
-            raise ValueError("Le superutilisateur doit avoir is_superuser=True.")
+    def __eq__(self, other):
+        return isinstance(other, User) and self.id == other.id
 
-        return self.create_user(email, password, **extra_fields)
-
-
-class User(AbstractBaseUser, PermissionsMixin):
-    """Modèle personnalisé d'utilisateur basé sur l'email."""
-
-    email = models.EmailField(
-        unique=True,
-        max_length=191,
-        verbose_name="Adresse email"
-    )
-    full_name = models.CharField(
-        max_length=191,
-        verbose_name="Nom complet"
-    )
-    avatar = models.ImageField(
-        upload_to="avatars/",
-        null=True,
-        blank=True,
-        verbose_name="Avatar"
-    )
-
-    is_active = models.BooleanField(default=True, verbose_name="Actif")
-    is_staff = models.BooleanField(default=False, verbose_name="Membre du staff")
-    date_joined = models.DateTimeField(default=timezone.now, verbose_name="Date d'inscription")
-
-    # Gestionnaire personnalisé
-    objects = UserManager()
-
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["full_name"]
-
-    class Meta:
-        verbose_name = "Utilisateur"
-        verbose_name_plural = "Utilisateurs"
-        ordering = ["-date_joined"]
-
-    def __str__(self):
-        return f"{self.full_name} ({self.email})"
+    def __hash__(self):
+        return hash(self.id)
 
     @property
     def first_name(self):
-        """Retourne le premier prénom (utile pour les affichages courts)."""
+        """Retourne le premier prénom."""
         return self.full_name.split(" ")[0] if self.full_name else ""
