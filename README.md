@@ -14,6 +14,8 @@ Ce document sert de guide complet pour l'installation, la configuration et la co
     - [Les 4 Couches de l'Architecture](#les-4-couches-de-larchitecture)
     - [Exemple d'un flux de requête](#exemple-dun-flux-de-requête)
 4. [Workflow de Démarrage Rapide](#workflow-de-démarrage-rapide)
+5. [Structure et Fonctionnalités des Applications](#structure-et-fonctionnalités-des-applications)
+6. [Guide d'implémentation : Ajout de la fonctionnalité d'inscription](#guide-dimplémentation--ajout-de-la-fonctionnalité-dinscription)
 
 ---
 
@@ -193,21 +195,24 @@ L'application devrait maintenant être accessible à l'adresse `http://127.0.0.1
 
 ---
 
-## Structure et Fonctionnalités de l'Application `users`
+## Structure et Fonctionnalités des Applications
 
-Cette section détaille l'organisation de l'application `users` selon la Clean Architecture et les fonctionnalités qu'elle expose.
+Cette section détaille l'organisation des applications du projet selon la Clean Architecture et les fonctionnalités qu'elles exposent.
 
-### Fonctionnalités Actuelles
+### Fonctionnalités par Application
 
-L'application fournit une API REST pour l'authentification des utilisateurs.
+#### Application `users`
+- **Inscription (Registration)**
+  - **Endpoint** : `POST /api/users/register/`
+  - **Description** : Permet à un nouvel utilisateur de créer un compte.
+- **Connexion (Login)**
+  - **Endpoint** : `POST /api/users/login/`
+  - **Description** : Permet à un utilisateur d'obtenir des jetons d'accès JWT.
 
-#### 1. Inscription (Registration)
-- **Endpoint** : `POST /api/users/register/`
-- **Description** : Permet à un nouvel utilisateur de créer un compte en fournissant un nom complet (`full_name`), une adresse email (`email`) et un mot de passe (`password`). Le système s'assure que l'email est unique.
-
-#### 2. Connexion (Login)
-- **Endpoint** : `POST /api/users/login/`
-- **Description** : Permet à un utilisateur de s'authentifier avec son email et son mot de passe pour obtenir des jetons d'accès JWT (`access` et `refresh`).
+#### Application `projects`
+- **Création de Projet (Project Creation)**
+  - **Endpoint** : `POST /api/projects/`
+  - **Description** : Permet à un utilisateur authentifié de créer un nouveau projet. Le créateur devient administrateur du projet.
 
 ### Arborescence Détaillée
 
