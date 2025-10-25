@@ -110,60 +110,56 @@ Notre architecture est divisée en quatre couches logiques, de la plus interne �
 
 #### 1. Domaine (Entities)
 -   **Rôle** : Le cœur de votre application. Contient la logique métier et les règles les plus fondamentales.
--   **Implémentation Django** : Les `models.py`. Ils définissent la structure des données et les validations de base. Cette couche ne doit dépendre de rien d'autre.
+-   **Implémentation** : Des classes Python pures qui ne dépendent d'aucun framework. Dans l'application `users`, l'entité `User` (`users/domain/entities/user.py`) est un exemple de cette couche.
 
 #### 2. Application (Use Cases / Services)
 -   **Rôle** : Orchestre le flux de données et exécute les cas d'utilisation (logique applicative). C'est ici que se trouve la logique métier spécifique à une action (ex: "créer un utilisateur", "calculer le total d'une commande").
--   **Implémentation Django** : Des fichiers `services.py` ou `use_cases.py`. Ces fichiers contiennent des fonctions ou des classes qui prennent des données simples en entrée (dictionnaires, etc.), appliquent la logique, et interagissent avec la couche Domaine via les Repositories. **Cette couche ne connaît ni HTTP, ni Django REST Framework.**
+-   **Implémentation** : Des fichiers `services.py` ou `use_cases.py`. Ces fichiers contiennent des classes qui prennent des données simples en entrée, appliquent la logique, et interagissent avec la couche Domaine via les Repositories. **Cette couche ne connaît ni HTTP, ni Django REST Framework.** L'`AuthService` (`users/application/services/auth_service.py`) en est un bon exemple.
 
 #### 3. Présentation (API / Framework)
 -   **Rôle** : Gère tout ce qui est lié à l'interface externe (dans notre cas, une API REST). Elle reçoit les requêtes HTTP, valide les données entrantes, et renvoie des réponses formatées (JSON).
--   **Implémentation Django** : Les `views.py` (ViewSets, APIViews), `serializers.py` et `urls.py` de Django REST Framework. Le rôle de cette couche est de traduire les requêtes HTTP en appels à la couche Application et de formater les résultats pour le client. **Elle ne doit contenir aucune logique métier.**
+-   **Implémentation** : Les `views.py` (ViewSets, APIViews), `serializers.py` et `urls.py` de Django REST Framework. Le rôle de cette couche est de traduire les requêtes HTTP en appels à la couche Application et de formater les résultats pour le client. **Elle ne doit contenir aucune logique métier.** Les vues de l'application `users` (`users/presentation/views/auth_view.py`) utilisent l'injection de dépendances pour appeler les services de la couche application.
 
 #### 4. Infrastructure (Frameworks & Drivers)
 -   **Rôle** : Contient tout ce qui est externe à l'application : la base de données, les services externes (APIs tierces), le cache, etc.
--   **Implémentation Django** : Cette couche est souvent matérialisée par le **Repository Pattern**. On crée des fichiers `repositories.py` qui abstraient l'accès à la base de données. Par exemple, au lieu d'appeler `User.objects.create()` directement dans la couche Application, on appellerait `user_repository.create_user()`. Cela permet de découpler la logique métier de l'ORM de Django.
+-   **Implémentation** : Cette couche est matérialisée par le **Repository Pattern** et les modèles Django. Les `repositories.py` abstraient l'accès à la base de données. Par exemple, au lieu d'appeler `User.objects.create()` directement dans la couche Application, on appellerait `user_repository.create_user()`. Les modèles Django, comme `UserModel` (`users/infrastructure/models/user_model.py`), sont considérés comme des détails d'implémentation de la persistance des données.
 
 ### Exemple d'un flux de requête
 
-Imaginons une requête `POST /api/users/` pour créer un nouvel utilisateur :
+Imaginons une requête `POST /api/users/register/` pour créer un nouvel utilisateur :
 
 1.  **Présentation (API)**
-    -   `urls.py` dirige la requête vers `UserCreateAPIView`.
-    -   `UserCreateAPIView` utilise `UserSerializer` pour valider les données JSON reçues (`request.data`).
-    -   Si la validation réussit, la vue n'enregistre pas l'utilisateur directement. Elle appelle une fonction de la couche Application :
+    -   `urls.py` dirige la requête vers `RegisterView`.
+    -   `RegisterView` utilise `RegisterSerializer` pour valider les données JSON reçues (`request.data`).
+    -   Si la validation réussit, la vue injecte les dépendances nécessaires dans `AuthService` et l'appelle :
         ```python
-        # views.py
-        user_data = serializer.validated_data
-        user = create_user_service(user_data) # Appel à la couche Application
+        # users/presentation/views/auth_view.py
+        auth_service = get_auth_service()
+        user = auth_service.register_user(**serializer.validated_data)
         ```
 
 2.  **Application (Service)**
-    -   La fonction `create_user_service` dans `services.py` reçoit les données validées.
-    -   Elle exécute la logique métier : peut-être vérifier si l'email n'est pas sur une liste noire, préparer des données par défaut, etc.
-    -   Elle appelle ensuite la couche Infrastructure (Repository) pour persister les données :
+    -   `AuthService` reçoit les données validées.
+    -   Il exécute la logique métier : vérifier si l'email existe déjà, hacher le mot de passe, etc.
+    -   Il appelle ensuite la couche Infrastructure (Repository) pour persister les données :
         ```python
-        # services.py
-        def create_user_service(user_data):
-            # ... logique métier ...
-            new_user = user_repository.create(**user_data)
-            # ... autre logique (ex: envoyer un email de bienvenue) ...
-            return new_user
+        # users/application/services/auth_service.py
+        password_hash = self.password_hasher.hash(password)
+        user = User(email=email, full_name=full_name, password_hash=password_hash)
+        return self.user_repository.create_user(user)
         ```
 
 3.  **Infrastructure (Repository)**
-    -   Le `user_repository` dans `repositories.py` contient la logique d'accès à la base de données, qui est spécifique à l'ORM de Django.
+    -   Le `UserRepository` dans `users/infrastructure/repositories/user_repository.py` contient la logique d'accès à la base de données, qui est spécifique à l'ORM de Django. Il utilise un `UserMapper` pour convertir l'entité `User` en `UserModel` avant de la sauvegarder.
         ```python
-        # repositories.py
-        from .models import User
-
-        class UserRepository:
-            def create(self, **user_data):
-                return User.objects.create_user(**user_data)
+        # users/infrastructure/repositories/user_repository.py
+        user_model = UserMapper.to_model(user_entity)
+        user_model.set_password(user_entity.password_hash)
+        user_model.save()
         ```
 
-4.  **Domaine (Model)**
-    -   L'ORM de Django utilise le modèle `User` (`models.py`) pour créer l'enregistrement en base de données, en respectant les contraintes définies dans le modèle.
+4.  **Domaine (Entity)**
+    -   L'entité `User` est utilisée tout au long du processus pour représenter l'utilisateur de manière agnostique au framework.
 
 Le flux de retour remonte ensuite les couches jusqu'à la vue, qui renvoie une réponse HTTP 201 Created avec les données de l'utilisateur sérialisées.
 
