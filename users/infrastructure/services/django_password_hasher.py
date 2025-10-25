@@ -1,7 +1,6 @@
 from django.contrib.auth.hashers import make_password, check_password
-from users.application.services.password_hasher import PasswordHasher
 
-class DjangoPasswordHasher(PasswordHasher):
+class DjangoPasswordHasher:
     def hash(self, password: str) -> str:
         return make_password(password)
 

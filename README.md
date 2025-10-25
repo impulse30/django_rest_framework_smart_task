@@ -227,9 +227,7 @@ users/
 │
 ├── application/                 # 2. La logique applicative (cas d'utilisation)
 │   └── services/
-│       ├── auth_service.py      # -> Orchestre l'inscription et la connexion.
-│       ├── password_hasher.py   # -> Interface ABSTRAITE pour le hachage de mdp.
-│       └── token_generator.py   # -> Interface ABSTRAITE pour la génération de token.
+│       └── auth_service.py      # -> Orchestre l'inscription et la connexion.
 │
 ├── infrastructure/              # 3. Les détails techniques (Django, base de données, etc.)
 │   ├── models/
@@ -312,48 +310,25 @@ class User:
 
 ### Étape 2 : L'Application (Les cas d'utilisation)
 
-Maintenant, on définit le cas d'utilisation "Inscrire un utilisateur". On a besoin d'un service qui orchestre cette action. Ce service aura besoin de dépendances (comme un "hasher" de mot de passe), mais il ne connaîtra que leurs interfaces abstraites.
+Maintenant, on définit le cas d'utilisation "Inscrire un utilisateur". On a besoin d'un service qui orchestre cette action.
 
-#### 2.1. Définir le contrat du Hasher
-
-**Fichier** : `users/application/services/password_hasher.py`
-
-**Rôle** : Définir ce que n'importe quel service de hachage doit pouvoir faire. C'est un contrat, pas une implémentation.
-
-```python
-import abc
-
-class PasswordHasher(abc.ABC):
-    @abc.abstractmethod
-    def hash(self, password: str) -> str:
-        ...
-
-    @abc.abstractmethod
-    def verify(self, password_hash: str, password: str) -> bool:
-        ...
-```
-
-#### 2.2. Créer le Service d'Authentification
+#### Créer le Service d'Authentification
 
 **Fichier** : `users/application/services/auth_service.py`
 
-**Rôle** : Contenir la logique de l'inscription. Il dépend du `UserRepository` (pour parler à la BDD) et du `PasswordHasher`, mais uniquement via leurs abstractions.
+**Rôle** : Contenir la logique de l'inscription. Il dépend du `UserRepository` (pour parler à la BDD) et utilise directement les services concrets de l'infrastructure pour le hachage et la génération de tokens.
 
 ```python
 from users.domain.entities.user import User
 from users.infrastructure.repositories.user_repository import UserRepository
-from users.application.services.password_hasher import PasswordHasher
+from users.infrastructure.services.django_password_hasher import DjangoPasswordHasher
+from users.infrastructure.services.jwt_token_generator import JWTTokenGenerator
 
 class AuthService:
-    def __init__(
-        self,
-        user_repository: UserRepository,
-        password_hasher: PasswordHasher,
-        # ... token_generator: TokenGenerator,
-    ):
+    def __init__(self, user_repository: UserRepository):
         self.user_repository = user_repository
-        self.password_hasher = password_hasher
-        # ...
+        self.password_hasher = DjangoPasswordHasher()
+        self.token_generator = JWTTokenGenerator()
 
     def register_user(self, email, password, full_name):
         if self.user_repository.exists_by_email(email):
@@ -415,46 +390,21 @@ class UserMapper:
         # ... logique de conversion ...
 ```
 
-#### 3.3. Le Repository
+#### 3.3. Le Repository et les Services Concrets
 
-**Fichier** : `users/infrastructure/repositories/user_repository.py`
+**Fichiers** : `users/infrastructure/repositories/user_repository.py` et `users/infrastructure/services/`
 
-**Rôle** : Implémenter la logique d'accès aux données. Il utilise le `UserModel` de Django et le `UserMapper`.
+**Rôle** : Le `UserRepository` implémente la logique d'accès aux données. Les services comme `DjangoPasswordHasher` fournissent les implémentations concrètes des outils dont l'`AuthService` a besoin.
 
 ```python
-from users.domain.entities.user import User
-from users.infrastructure.models.user_model import UserModel
-from users.infrastructure.mappers.user_mapper import UserMapper
-
+# users/infrastructure/repositories/user_repository.py
 class UserRepository:
     def create_user(self, user_entity: User) -> User:
         user_model = UserMapper.to_model(user_entity)
-        user_model.set_password(user_entity.password_hash) # Note: set_password vient de l'AbstractBaseUser de Django
+        user_model.set_password(user_entity.password_hash)
         user_model.save()
         return UserMapper.to_entity(user_model)
-
-    def exists_by_email(self, email: str) -> bool:
-        return UserModel.objects.filter(email=email).exists()
-
-    # ... autres méthodes ...
-```
-
-#### 3.4. L'implémentation du Hasher
-
-**Fichier** : `users/infrastructure/services/django_password_hasher.py`
-
-**Rôle** : Fournir une implémentation concrète de l'interface `PasswordHasher` en utilisant les fonctions de Django.
-
-```python
-from django.contrib.auth.hashers import make_password, check_password
-from users.application.services.password_hasher import PasswordHasher
-
-class DjangoPasswordHasher(PasswordHasher):
-    def hash(self, password: str) -> str:
-        return make_password(password)
-
-    def verify(self, password_hash: str, password: str) -> bool:
-        return check_password(password, password_hash)
+    # ...
 ```
 
 ### Étape 4 : La Présentation (L'API REST)
@@ -480,7 +430,7 @@ class RegisterSerializer(serializers.Serializer):
 
 **Fichier** : `users/presentation/views/auth_view.py`
 
-**Rôle** : Gérer la requête HTTP. Elle utilise le Serializer pour valider les données, puis instancie et appelle `AuthService` avec toutes ses dépendances concrètes. C'est ce qu'on appelle l'**Injection de Dépendances**.
+**Rôle** : Gérer la requête HTTP. Elle utilise le Serializer pour valider les données, puis instancie et appelle `AuthService`. L'injection de dépendances est plus simple : on ne fournit que le `UserRepository`.
 
 ```python
 from rest_framework.response import Response
@@ -489,13 +439,11 @@ from rest_framework.views import APIView
 from .serializers import RegisterSerializer
 from users.application.services.auth_service import AuthService
 from users.infrastructure.repositories.user_repository import UserRepository
-from users.infrastructure.services.django_password_hasher import DjangoPasswordHasher
 
-# C'est ici que l'on assemble nos composants
+# On assemble les composants nécessaires pour AuthService
 def get_auth_service():
     user_repository = UserRepository()
-    password_hasher = DjangoPasswordHasher()
-    return AuthService(user_repository, password_hasher)
+    return AuthService(user_repository)
 
 class RegisterView(APIView):
     def post(self, request):

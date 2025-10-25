@@ -1,18 +1,13 @@
 from users.domain.entities.user import User
 from users.infrastructure.repositories.user_repository import UserRepository
-from users.application.services.password_hasher import PasswordHasher
-from users.application.services.token_generator import TokenGenerator
+from users.infrastructure.services.django_password_hasher import DjangoPasswordHasher
+from users.infrastructure.services.jwt_token_generator import JWTTokenGenerator
 
 class AuthService:
-    def __init__(
-        self,
-        user_repository: UserRepository,
-        password_hasher: PasswordHasher,
-        token_generator: TokenGenerator,
-    ):
+    def __init__(self, user_repository: UserRepository):
         self.user_repository = user_repository
-        self.password_hasher = password_hasher
-        self.token_generator = token_generator
+        self.password_hasher = DjangoPasswordHasher()
+        self.token_generator = JWTTokenGenerator()
 
     def register_user(self, email, password, full_name):
         if self.user_repository.exists_by_email(email):
