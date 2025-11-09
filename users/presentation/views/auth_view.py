@@ -5,7 +5,7 @@ from users.presentation.serializers.auth_serializers import RegisterSerializer, 
 from users.application.services.auth_service import AuthService
 from users.infrastructure.repositories.user_repository import UserRepository
 
-# Injection de dépendances simplifiée
+# Injection de dépendances
 def get_auth_service():
     user_repository = UserRepository()
     return AuthService(user_repository)
@@ -37,6 +37,6 @@ class LoginView(APIView):
         try:
             auth_service = get_auth_service()
             data = auth_service.login_user(**serializer.validated_data)
-            return Response(data, status=status.HTTP_201_CREATED)
+            return Response(data, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)

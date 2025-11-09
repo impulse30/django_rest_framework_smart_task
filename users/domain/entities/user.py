@@ -10,7 +10,7 @@ class User:
         id,
         email,
         full_name,
-        password_hash=None,  # Ne pas stocker le mot de passe en clair
+        password_hash=None,
         avatar=None,
         is_active=True,
         is_staff=False,
@@ -36,17 +36,11 @@ class User:
         return full_name.strip()
 
     def set_password(self, password, hasher):
-        """
-        Définit le mot de passe de l'utilisateur en utilisant un hasher externe.
-        """
         if not password or len(password) < 8:
             raise ValueError("Le mot de passe doit contenir au moins 8 caractères.")
         self.password_hash = hasher.hash(password)
 
     def check_password(self, password, hasher):
-        """
-        Vérifie si un mot de passe correspond au hash stocké.
-        """
         return hasher.verify(self.password_hash, password)
 
     def __eq__(self, other):
@@ -57,5 +51,4 @@ class User:
 
     @property
     def first_name(self):
-        """Retourne le premier prénom."""
         return self.full_name.split(" ")[0] if self.full_name else ""

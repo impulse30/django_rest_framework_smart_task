@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import UserModel
+from data.models import User
 
 class UserAdmin(BaseUserAdmin):
     ordering = ['email']
@@ -19,4 +19,4 @@ class UserAdmin(BaseUserAdmin):
     )
     search_fields = ('email', 'full_name')
 
-admin.site.register(UserModel, UserAdmin)
+admin.site.register(User, UserAdmin)

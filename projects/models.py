@@ -1,3 +1,3 @@
-from projects.infrastructure.models import ProjectModel, ProjectMemberModel
+from django.db import models
 
-__all__ = ["ProjectModel", "ProjectMemberModel"]
+# Create your models here.

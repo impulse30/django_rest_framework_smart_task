@@ -27,8 +27,6 @@ class ProjectCreateView(APIView):
                 description=serializer.validated_data.get("description", ""),
                 owner_id=request.user.id
             )
-            # Pour la réponse, nous allons retourner un dictionnaire simple
-            # Un serializer de sortie serait idéal pour un cas plus complexe
             response_data = {
                 "id": project.id,
                 "name": project.name,

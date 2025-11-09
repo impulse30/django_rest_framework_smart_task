@@ -1,5 +1,5 @@
 from projects.domain.entities.project_member import ProjectMember
-from projects.infrastructure.models.project_member_model import ProjectMemberModel
+from data.models import ProjectMember as ProjectMemberModel
 
 class ProjectMemberMapper:
     @staticmethod

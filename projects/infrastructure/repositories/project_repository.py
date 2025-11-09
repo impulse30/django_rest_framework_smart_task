@@ -1,7 +1,7 @@
 from projects.domain.entities import Project, ProjectMember
-from projects.infrastructure.models import ProjectModel, ProjectMemberModel
-from projects.infrastructure.mappers import ProjectMapper, ProjectMemberMapper
-from users.infrastructure.models.user_model import UserModel
+from data.models import Project as ProjectModel, ProjectMember as ProjectMemberModel
+from projects.infrastructure.mappers.project_mapper import ProjectMapper
+from projects.infrastructure.mappers.project_member_mapper import ProjectMemberMapper
 
 class ProjectRepository:
     def create_project(self, project_entity: Project) -> Project:

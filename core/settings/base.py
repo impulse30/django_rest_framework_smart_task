@@ -33,9 +33,8 @@ INSTALLED_APPS = [
     # Third-party apps
     "rest_framework",
 
-    # Local apps (ajouter ici plus tard)
-    "users",
-    "projects",
+    # Local apps
+    "data",
 ]
 
 MIDDLEWARE = [
@@ -120,7 +119,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Default Primary Key Field
 # ---------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-AUTH_USER_MODEL = "users.UserModel"
+AUTH_USER_MODEL = "data.User"
 
 from datetime import timedelta
 
@@ -135,5 +134,3 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
-
-
