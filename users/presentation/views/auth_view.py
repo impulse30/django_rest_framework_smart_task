@@ -4,11 +4,13 @@ from rest_framework.views import APIView
 from users.presentation.serializers.auth_serializers import RegisterSerializer, LoginSerializer
 from users.application.services.auth_service import AuthService
 from users.infrastructure.repositories.user_repository import UserRepository
+from users.infrastructure.services.jwt_token_service import JWTTokenService
 
 # Injection de dépendances
 def get_auth_service():
     user_repository = UserRepository()
-    return AuthService(user_repository)
+    token_service = JWTTokenService()
+    return AuthService(user_repository, token_service)
 
 class RegisterView(APIView):
     def post(self, request):

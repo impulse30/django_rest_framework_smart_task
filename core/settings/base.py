@@ -35,6 +35,8 @@ INSTALLED_APPS = [
 
     # Local apps
     "data",
+    "users",
+    "projects",
 ]
 
 MIDDLEWARE = [

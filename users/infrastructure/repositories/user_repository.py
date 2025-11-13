@@ -5,7 +5,8 @@ from users.infrastructure.mappers.user_mapper import UserMapper
 class UserRepository:
     def create_user(self, user_entity: User) -> User:
         user_model = UserMapper.to_model(user_entity)
-        user_model.set_password(user_entity.password_hash)
+        # Le mot de passe est déjà haché dans le service, on le sauvegarde tel quel.
+        user_model.password = user_entity.password_hash
         user_model.save()
         return UserMapper.to_entity(user_model)
 

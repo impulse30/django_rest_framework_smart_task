@@ -1,12 +1,12 @@
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework_simplejwt.tokens import RefreshToken
 from users.domain.entities.user import User
-from data.models import User as UserModel
 from users.infrastructure.repositories.user_repository import UserRepository
+from users.application.services.token_service import ITokenService
 
 class AuthService:
-    def __init__(self, user_repository: UserRepository):
+    def __init__(self, user_repository: UserRepository, token_service: ITokenService):
         self.user_repository = user_repository
+        self.token_service = token_service
 
     def register_user(self, email, password, full_name):
         if self.user_repository.exists_by_email(email):
@@ -26,15 +26,7 @@ class AuthService:
         if not user or not check_password(password, user.password_hash):
             raise ValueError("Identifiants invalides.")
 
-        try:
-            user_model = UserModel.objects.get(id=user.id)
-            refresh = RefreshToken.for_user(user_model)
-            tokens = {
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
-            }
-        except UserModel.DoesNotExist:
-            raise ValueError(f"No UserModel found for user with ID {user.id}")
+        tokens = self.token_service.generate_tokens(user)
 
         return {
             "access": tokens["access"],
